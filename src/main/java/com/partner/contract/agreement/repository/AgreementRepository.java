@@ -60,4 +60,6 @@ public interface AgreementRepository extends JpaRepository<Agreement, Long> {
     List<IncorrectTextAnalysisReportResponseDto> findIncorrectTextAnalysisReportByAgreementId(@Param("agreementId") Long agreementId);
 
     List<Agreement> findByAiStatusAndCreatedAtBefore(AiStatus aiStatus, LocalDateTime fiveMinutesAgo);
+
+    Boolean existsByCategoryId(Long categoryId);
 }

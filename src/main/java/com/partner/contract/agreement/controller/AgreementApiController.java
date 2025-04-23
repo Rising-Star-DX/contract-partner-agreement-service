@@ -1,23 +1,19 @@
 package com.partner.contract.agreement.controller;
 
-import com.partner.contract.agreement.dto.*;
 import com.partner.contract.agreement.service.AgreementService;
-import com.partner.contract.common.enums.FileType;
 import com.partner.contract.global.exception.dto.SuccessResponse;
 import com.partner.contract.global.exception.error.SuccessCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
 import java.util.Map;
 
 
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("/agreements")
-public class AgreementController {
+public class AgreementApiController {
     private final AgreementService agreementService;
 
 //    @GetMapping

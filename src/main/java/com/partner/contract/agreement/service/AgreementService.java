@@ -198,4 +198,8 @@ public class AgreementService {
 //                .incorrectTextAnalysisReportResponseDtoList(agreementRepository.findIncorrectTextAnalysisReportByAgreementId(id))
 //                .build();
 //    }
+
+    public Boolean existsByCategory(Long categoryId) {
+        return agreementRepository.existsByCategoryId(categoryId);
+    }
 }
