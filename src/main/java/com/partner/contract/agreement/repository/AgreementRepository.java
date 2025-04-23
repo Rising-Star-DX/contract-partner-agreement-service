@@ -1,6 +1,7 @@
 package com.partner.contract.agreement.repository;
 
 import com.partner.contract.agreement.domain.Agreement;
+import com.partner.contract.agreement.dto.AgreementCountsResponseDto;
 import com.partner.contract.agreement.dto.IncorrectTextAnalysisReportResponseDto;
 import com.partner.contract.agreement.dto.IncorrectTextResponseDto;
 import com.partner.contract.common.enums.AiStatus;
@@ -62,4 +63,9 @@ public interface AgreementRepository extends JpaRepository<Agreement, Long> {
     List<Agreement> findByAiStatusAndCreatedAtBefore(AiStatus aiStatus, LocalDateTime fiveMinutesAgo);
 
     Boolean existsByCategoryId(Long categoryId);
+
+    Long countByCategoryId(Long categoryId);
+
+    @Query("select new com.partner.contract.agreement.dto.AgreementCountsResponseDto(a.categoryId, count(a.categoryId)) from Agreement a group by a.categoryId")
+    List<AgreementCountsResponseDto> countByCategoryId();
 }

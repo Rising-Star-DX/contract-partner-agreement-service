@@ -202,4 +202,12 @@ public class AgreementService {
     public Boolean existsByCategory(Long categoryId) {
         return agreementRepository.existsByCategoryId(categoryId);
     }
+
+    public Long getAgreementCountByCategoryId(Long categoryId) {
+        return agreementRepository.countByCategoryId(categoryId);
+    }
+
+    public List<AgreementCountsResponseDto> findStandardCountByCategoryId() {
+        return agreementRepository.countByCategoryId();
+    }
 }
