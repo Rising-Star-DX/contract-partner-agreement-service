@@ -1,5 +1,9 @@
 package com.partner.contract.agreement.service;
 
+import com.partner.contract.agreement.Client.CategoryFeignClient;
+import com.partner.contract.agreement.Client.StandardFeignClient;
+import com.partner.contract.agreement.Client.dto.CategoryNameListResponseDto;
+import com.partner.contract.agreement.Client.dto.DocumentExistsResponseDto;
 import com.partner.contract.agreement.domain.Agreement;
 import com.partner.contract.agreement.dto.*;
 import com.partner.contract.agreement.repository.AgreementRepository;
@@ -19,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,26 +33,39 @@ public class AgreementService {
     private final AgreementAnalysisAsyncService agreementAnalysisAsyncService;
     private final AgreementRepository agreementRepository;
     private final S3Service s3Service;
+    private final CategoryFeignClient categoryFeignClient;
+    private final StandardFeignClient standardFeignClient;
     private final FileConversionService fileConversionService;
 
-//    public List<AgreementListResponseDto> findAgreementList(String name, Long categoryId) {
-//        List<Agreement> agreements;
-//
-//        if(categoryId == null) {
-//            agreements = agreementRepository.findWithCategoryByNameContainingOrderByCreatedAtDesc(name);
-//        }
-//        else {
-//            categoryRepository.findById(categoryId)
-//                    .orElseThrow(() -> new ApplicationException(ErrorCode.CATEGORY_NOT_FOUND_ERROR));
-//
-//            agreements = agreementRepository.findAgreementListOrderByCreatedAtDesc(name, categoryId);
-//        }
-//
-//        return agreements
-//                .stream()
-//                .map(AgreementListResponseDto::fromEntity)
-//                .collect(Collectors.toList());
-//    }
+    public List<AgreementListResponseDto> findAgreementList(String name, Long categoryId) {
+        List<Agreement> agreements;
+
+        List<CategoryNameListResponseDto> allCategoryIdAndName = categoryFeignClient.getAllCategoryIdAndName();
+
+        Map<Long, String> categoryIdAndNameMap = allCategoryIdAndName.stream()
+                .collect(Collectors.toMap(CategoryNameListResponseDto::getId, CategoryNameListResponseDto::getName));
+
+        if(categoryId == null) {
+            agreements = agreementRepository.findWithCategoryByNameContainingOrderByCreatedAtDesc(name);
+        }
+        else {
+            if (!categoryIdAndNameMap.containsKey(categoryId)) {
+                throw new ApplicationException(ErrorCode.CATEGORY_NOT_FOUND_ERROR);
+            }
+            agreements = agreementRepository.findAgreementListOrderByCreatedAtDesc(name, categoryId);
+        }
+
+        return agreements.stream()
+                .map(agreement -> AgreementListResponseDto.builder()
+                        .id(agreement.getId())
+                        .name(agreement.getName())
+                        .type(agreement.getType())
+                        .status(DocumentStatusUtil.determineStatus(agreement.getFileStatus(), agreement.getAiStatus()))
+                        .createdAt(agreement.getCreatedAt())
+                        .categoryName(categoryIdAndNameMap.get(agreement.getCategoryId()))
+                        .build())
+                .collect(Collectors.toList());
+    }
 
 //    public List<AgreementListResponseDto> findAgreementListForAndroid(AgreementListRequestForAndroidDto requestForAndroidDto) {
 //        if(!CollectionUtils.isEmpty(requestForAndroidDto.getSortBy())) {
@@ -65,31 +83,33 @@ public class AgreementService {
 //                .collect(Collectors.toList());
 //    }
 
-//    public Long uploadFile(MultipartFile file, Long categoryId) {
-//
-//        Category category = categoryRepository.findById(categoryId)
-//                .orElseThrow(() -> new ApplicationException(ErrorCode.CATEGORY_NOT_FOUND_ERROR));
-//
-//        Agreement agreement = Agreement.builder()
-//                .name(file.getOriginalFilename())
-//                .type(FileType.fromContentType(file.getContentType()))
-//                .category(category)
-//                .build();
-//
-//        if(agreement.getType().isConvertiblePdf()) {
-//            file = fileConversionService.convertFileToPdf(file, agreement.getType());
-//        }
-//        // s3 파일 저장
-//        String fileName = null;
-//        try {
-//            fileName = s3Service.uploadFile(file, "agreements");
-//        } catch (ApplicationException e) {
-//            throw e; // 예외 다시 던지기
-//        }
-//
-//        agreement.updateFileStatus(fileName, FileStatus.SUCCESS);
-//        return agreementRepository.save(agreement).getId();
-//    }
+    public Long uploadFile(MultipartFile file, Long categoryId) {
+
+        CategoryNameListResponseDto category = categoryFeignClient.getCategoryIdAndName(categoryId);
+        if (category == null) {
+            throw new ApplicationException(ErrorCode.CATEGORY_NOT_FOUND_ERROR);
+        }
+
+        Agreement agreement = Agreement.builder()
+                .name(file.getOriginalFilename())
+                .type(FileType.fromContentType(file.getContentType()))
+                .categoryId(categoryId)
+                .build();
+
+        if(agreement.getType().isConvertiblePdf()) {
+            file = fileConversionService.convertFileToPdf(file, agreement.getType());
+        }
+        // s3 파일 저장
+        String fileName = null;
+        try {
+            fileName = s3Service.uploadFile(file, "agreements");
+        } catch (ApplicationException e) {
+            throw e; // 예외 다시 던지기
+        }
+
+        agreement.updateFileStatus(fileName, FileStatus.SUCCESS);
+        return agreementRepository.save(agreement).getId();
+    }
 
     public void deleteAgreement(Long id) {
         Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
@@ -116,21 +136,22 @@ public class AgreementService {
         }
     }
 
-//    public AgreementDetailsResponseDto findAgreementDetailsById(Long id) {
-//        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
-//        AgreementDetailsResponseDto agreementDetailsResponseDto = AgreementDetailsResponseDto.builder()
-//                .id(agreement.getId())
-//                .name(agreement.getName())
-//                .type(agreement.getType())
-//                .url(agreement.getUrl())
-//                .status(DocumentStatusUtil.determineStatus(agreement.getFileStatus(), agreement.getAiStatus()))
-//                .categoryName(agreement.getCategory().getName())
-//                .totalPage(agreement.getTotalPage())
-//                .incorrectTextResponseDtoList(agreementRepository.findIncorrectTextByAgreementId(id))
-//                .build();
-//
-//        return agreementDetailsResponseDto;
-//    }
+    public AgreementDetailsResponseDto findAgreementDetailsById(Long id) {
+        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
+
+        AgreementDetailsResponseDto agreementDetailsResponseDto = AgreementDetailsResponseDto.builder()
+                .id(agreement.getId())
+                .name(agreement.getName())
+                .type(agreement.getType())
+                .url(agreement.getUrl())
+                .status(DocumentStatusUtil.determineStatus(agreement.getFileStatus(), agreement.getAiStatus()))
+                .categoryName(categoryFeignClient.getCategoryIdAndName(agreement.getCategoryId()).getName())
+                .totalPage(agreement.getTotalPage())
+                .incorrectTextResponseDtoList(agreementRepository.findIncorrectTextByAgreementId(id))
+                .build();
+
+        return agreementDetailsResponseDto;
+    }
   
     public Boolean checkAnalysisCompleted(Long id) {
         Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
@@ -152,52 +173,52 @@ public class AgreementService {
         agreementRepository.saveAll(agreements);
     }
 
-//    @Transactional(noRollbackFor = ApplicationException.class)
-//    public AgreementAnalysisStartResponseDto startAnalyze(Long id) {
-//        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
-//
-//        Boolean fileExists = standardRepository.existsByCategoryIdAndAiStatus(agreement.getCategory().getId(), AiStatus.SUCCESS);
-//        if (!fileExists) { // 학습된 파일이 존재하지 않는 경우
-//            agreement.updateAiStatus(AiStatus.FAILED);
-//            agreementRepository.save(agreement);
-//            throw new ApplicationException(ErrorCode.NO_ANALYSIS_STANDARD_DOCUMENT);
-//        }
-//
-//        if (agreement.getFileStatus() != FileStatus.SUCCESS) {
-//            agreement.updateAiStatus(AiStatus.FAILED);
-//            agreementRepository.save(agreement);
-//            throw new ApplicationException(ErrorCode.MISSING_FILE_FOR_ANALYSIS);
-//        } else if (agreement.getAiStatus() == AiStatus.FAILED || agreement.getAiStatus() == AiStatus.SUCCESS) {
-//            agreement.updateAiStatus(AiStatus.FAILED);
-//            agreementRepository.save(agreement);
-//            throw new ApplicationException(ErrorCode.AI_ANALYSIS_ALREADY_COMPLETED);
-//        } else if (agreement.getAiStatus() == AiStatus.ANALYZING) {
-//            agreement.updateAiStatus(AiStatus.FAILED);
-//            agreementRepository.save(agreement);
-//            throw new ApplicationException(ErrorCode.AI_ANALYSIS_ALREADY_STARTED);
-//        }
-//
-//        agreement.updateAiStatus(AiStatus.ANALYZING);
-//        agreementRepository.save(agreement);
-//
-//        // 비동기로 분석 요청
-//        agreementAnalysisAsyncService.analyze(agreement, agreement.getCategory().getName());
-//
-//        return new AgreementAnalysisStartResponseDto(id, agreement.getUrl());
-//    }
-//
-//    public AgreementAnalysisReportDetailsResponseDto findAgreementAnalysisReportDetails(Long id) {
-//        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
-//
-//        return AgreementAnalysisReportDetailsResponseDto.builder()
-//                .id(agreement.getId())
-//                .name(agreement.getName())
-//                .categoryName(agreement.getCategory().getName())
-//                .totalPage(agreement.getTotalPage())
-//                .totalChunks(agreement.getTotalChunks())
-//                .incorrectTextAnalysisReportResponseDtoList(agreementRepository.findIncorrectTextAnalysisReportByAgreementId(id))
-//                .build();
-//    }
+    @Transactional(noRollbackFor = ApplicationException.class)
+    public AgreementAnalysisStartResponseDto startAnalyze(Long id) {
+        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
+
+        DocumentExistsResponseDto documentExistsResponseDto = standardFeignClient.doesStandardExistByCategoryIdAndAiState(agreement.getCategoryId(), AiStatus.SUCCESS);
+        if (!documentExistsResponseDto.getExists()) { // 학습된 파일이 존재하지 않는 경우
+            agreement.updateAiStatus(AiStatus.FAILED);
+            agreementRepository.save(agreement);
+            throw new ApplicationException(ErrorCode.NO_ANALYSIS_STANDARD_DOCUMENT);
+        }
+
+        if (agreement.getFileStatus() != FileStatus.SUCCESS) {
+            agreement.updateAiStatus(AiStatus.FAILED);
+            agreementRepository.save(agreement);
+            throw new ApplicationException(ErrorCode.MISSING_FILE_FOR_ANALYSIS);
+        } else if (agreement.getAiStatus() == AiStatus.FAILED || agreement.getAiStatus() == AiStatus.SUCCESS) {
+            agreement.updateAiStatus(AiStatus.FAILED);
+            agreementRepository.save(agreement);
+            throw new ApplicationException(ErrorCode.AI_ANALYSIS_ALREADY_COMPLETED);
+        } else if (agreement.getAiStatus() == AiStatus.ANALYZING) {
+            agreement.updateAiStatus(AiStatus.FAILED);
+            agreementRepository.save(agreement);
+            throw new ApplicationException(ErrorCode.AI_ANALYSIS_ALREADY_STARTED);
+        }
+
+        agreement.updateAiStatus(AiStatus.ANALYZING);
+        agreementRepository.save(agreement);
+
+        // 비동기로 분석 요청
+        agreementAnalysisAsyncService.analyze(agreement, categoryFeignClient.getCategoryIdAndName(agreement.getCategoryId()).getName());
+
+        return new AgreementAnalysisStartResponseDto(id, agreement.getUrl());
+    }
+
+    public AgreementAnalysisReportDetailsResponseDto findAgreementAnalysisReportDetails(Long id) {
+        Agreement agreement = agreementRepository.findById(id).orElseThrow(() -> new ApplicationException(ErrorCode.AGREEMENT_NOT_FOUND_ERROR));
+
+        return AgreementAnalysisReportDetailsResponseDto.builder()
+                .id(agreement.getId())
+                .name(agreement.getName())
+                .categoryName(categoryFeignClient.getCategoryIdAndName(agreement.getCategoryId()).getName())
+                .totalPage(agreement.getTotalPage())
+                .totalChunks(agreement.getTotalChunks())
+                .incorrectTextAnalysisReportResponseDtoList(agreementRepository.findIncorrectTextAnalysisReportByAgreementId(id))
+                .build();
+    }
 
     public Boolean existsByCategory(Long categoryId) {
         return agreementRepository.existsByCategoryId(categoryId);

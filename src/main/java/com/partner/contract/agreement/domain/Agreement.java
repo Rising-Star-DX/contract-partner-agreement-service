@@ -49,7 +49,6 @@ public class Agreement {
     @Column(nullable = false)
     private Long categoryId;
 
-    @Column(nullable = false)
     private Long memberId;
 
     @OneToMany(mappedBy = "agreement", cascade = CascadeType.ALL)

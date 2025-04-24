@@ -16,11 +16,11 @@ import java.util.List;
 @Repository
 public interface AgreementRepository extends JpaRepository<Agreement, Long> {
 //public interface AgreementRepository extends JpaRepository<Agreement, Long>, AgreementRepositoryCustom {
-//    @Query("select a from Agreement a join fetch a.category c where a.aiStatus is not null and a.name like %:name% order by a.createdAt desc")
-//    List<Agreement> findWithCategoryByNameContainingOrderByCreatedAtDesc(@Param("name") String name);
+    @Query("select a from Agreement a where a.aiStatus is not null and a.name like %:name% order by a.createdAt desc")
+    List<Agreement> findWithCategoryByNameContainingOrderByCreatedAtDesc(@Param("name") String name);
 
-//    @Query("select a from Agreement a join fetch a.category c where a.aiStatus is not null and a.name like %:name% and a.category.id = :categoryId order by a.createdAt desc")
-//    List<Agreement> findAgreementListOrderByCreatedAtDesc(@Param("name") String name, @Param("categoryId") Long categoryId);
+    @Query("select a from Agreement a where a.aiStatus is not null and a.name like %:name% and a.categoryId = :categoryId order by a.createdAt desc")
+    List<Agreement> findAgreementListOrderByCreatedAtDesc(@Param("name") String name, @Param("categoryId") Long categoryId);
 
     @Query(value = """
         SELECT 
